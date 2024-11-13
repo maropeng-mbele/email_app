@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Composer and Sender</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <!-- Toolbar -->
+            <div class="flex space-x-4 mb-4">
+                <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="saveContent()">Save</button>
+                <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="loadContent()">Load</button>
+                <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="document.getElementById('imageUpload').click()">Upload Image</button>
+                <button class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600" onclick="sendEmails()">Send Emails</button>
+            </div>
+
+            <input type="file" id="imageUpload" accept="image/*" class="hidden" multiple onchange="handleImageUpload(event)">
+
+            <div class="flex">
+                <!-- Text Editor -->
+                <div class="flex-grow mr-4">
+                    <textarea id="editor" class="w-full h-[600px] p-4 border rounded resize-none font-mono" placeholder="Enter your email content here..."></textarea>
+                </div>
+
+                <!-- Image Sidebar -->
+                <div class="w-64 border-l pl-4">
+                    <h3 class="text-lg font-semibold mb-4">Images</h3>
+                    <div id="imageSidebar" class="space-y-4 overflow-y-auto" style="max-height: 600px;">
+                        <!-- Images will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let images = {};
+        let imageCounter = 0;
+
+        async function handleImageUpload(event) {
+            const files = event.target.files;
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    
+                    if (data.path) {
+                        imageCounter++;
+                        const imageId = `image_${imageCounter}`;
+                        images[imageId] = data.path;
+                        addImageToSidebar(data.path, imageId);
+                    }
+                } catch (error) {
+                    console.error('Upload failed:', error);
+                    alert('Failed to upload image');
+                }
+            }
+        }
+
+        function addImageToSidebar(path, imageId) {
+            const sidebar = document.getElementById('imageSidebar');
+            const div = document.createElement('div');
+            div.className = 'relative group';
+            div.innerHTML = `
+                <img src="${path}" alt="Uploaded image" class="w-full h-32 object-cover rounded cursor-pointer hover:opacity-75"
+                     onclick="insertImagePlaceholder('${imageId}')">
+                <span class="text-sm text-gray-500 mt-1 block">${path.split('/').pop()}</span>
+            `;
+            sidebar.appendChild(div);
+        }
+
+        function insertImagePlaceholder(imageId) {
+            const editor = document.getElementById('editor');
+            const cursorPos = editor.selectionStart;
+            const content = editor.value;
+            const newContent = content.slice(0, cursorPos) + `\n[${imageId}]\n` + content.slice(cursorPos);
+            editor.value = newContent;
+        }
+
+        async function saveContent() {
+            const content = document.getElementById('editor').value;
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content, images })
+                });
+                const data = await response.json();
+                alert(data.message || 'Saved successfully');
+            } catch (error) {
+                console.error('Save failed:', error);
+                alert('Failed to save content');
+            }
+        }
+
+        async function loadContent() {
+            try {
+                const response = await fetch('/api/load');
+                const data = await response.json();
+                document.getElementById('editor').value = data.content;
+                images = data.images;
+                
+                // Clear and reload sidebar
+                document.getElementById('imageSidebar').innerHTML = '';
+                for (const [imageId, path] of Object.entries(images)) {
+                    addImageToSidebar(path, imageId);
+                }
+            } catch (error) {
+                console.error('Load failed:', error);
+                alert('Failed to load content');
+            }
+        }
+
+        async function sendEmails() {
+            const content = document.getElementById('editor').value;
+            try {
+                const response = await fetch('/api/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content, images })
+                });
+                const data = await response.json();
+                alert(data.message || 'Emails sent successfully');
+            } catch (error) {
+                console.error('Send failed:', error);
+                alert('Failed to send emails');
+            }
+        }
+    </script>
+</body>
+</html>
